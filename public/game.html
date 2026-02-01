@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Billiard Game</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #0d2818;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let gameState = { balls: [], players: {} };
+
+        const TABLE_WIDTH = 1600;
+        const TABLE_HEIGHT = 900;
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        socket.on('gameState', (state) => {
+            gameState = state;
+        });
+
+        // Redirect to lobby if no game running
+        socket.on('noGame', () => {
+            window.location.href = '/';
+        });
+
+        function draw() {
+            requestAnimationFrame(draw);
+
+            ctx.fillStyle = '#0d2818';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const scale = Math.min(canvas.width / TABLE_WIDTH, canvas.height / TABLE_HEIGHT) * 0.98;
+            const offsetX = (canvas.width - TABLE_WIDTH * scale) / 2;
+            const offsetY = (canvas.height - TABLE_HEIGHT * scale) / 2;
+
+            ctx.save();
+            ctx.translate(offsetX, offsetY);
+            ctx.scale(scale, scale);
+
+            // Table frame
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+            ctx.shadowBlur = 30;
+            ctx.fillStyle = '#5d4037';
+            ctx.fillRect(-45, -45, TABLE_WIDTH + 90, TABLE_HEIGHT + 90);
+            ctx.shadowBlur = 0;
+
+            // Rails
+            const railWidth = 40;
+            ctx.fillStyle = '#6d4c41';
+            ctx.fillRect(-railWidth, -railWidth, TABLE_WIDTH + 2 * railWidth, railWidth);
+            ctx.fillRect(-railWidth, TABLE_HEIGHT, TABLE_WIDTH + 2 * railWidth, railWidth);
+            ctx.fillRect(-railWidth, 0, railWidth, TABLE_HEIGHT);
+            ctx.fillRect(TABLE_WIDTH, 0, railWidth, TABLE_HEIGHT);
+
+            // Felt
+            const feltGradient = ctx.createRadialGradient(
+                TABLE_WIDTH / 2, TABLE_HEIGHT / 2, 0,
+                TABLE_WIDTH / 2, TABLE_HEIGHT / 2, TABLE_WIDTH / 1.5
+            );
+            feltGradient.addColorStop(0, '#1e8449');
+            feltGradient.addColorStop(1, '#145a32');
+            ctx.fillStyle = feltGradient;
+            ctx.fillRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
+
+            // Cushion
+            ctx.strokeStyle = '#27ae60';
+            ctx.lineWidth = 10;
+            ctx.strokeRect(5, 5, TABLE_WIDTH - 10, TABLE_HEIGHT - 10);
+
+            // Holes
+            const holes = [
+                [0, 0], [TABLE_WIDTH / 2, 0], [TABLE_WIDTH, 0],
+                [0, TABLE_HEIGHT], [TABLE_WIDTH / 2, TABLE_HEIGHT], [TABLE_WIDTH, TABLE_HEIGHT]
+            ];
+            const holeRadius = 45;
+
+            holes.forEach(pos => {
+                ctx.beginPath();
+                ctx.arc(pos[0], pos[1], holeRadius + 8, 0, Math.PI * 2);
+                ctx.fillStyle = '#3e2723';
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(pos[0], pos[1], holeRadius, 0, Math.PI * 2);
+                ctx.fillStyle = '#0a0a0a';
+                ctx.fill();
+            });
+
+            // Balls
+            gameState.balls.forEach(ball => {
+                // Shadow
+                ctx.beginPath();
+                ctx.arc(ball.x + 4, ball.y + 4, ball.r, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.fill();
+
+                // Ball
+                ctx.beginPath();
+                ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+
+                const ballGradient = ctx.createRadialGradient(
+                    ball.x - ball.r * 0.3, ball.y - ball.r * 0.3, ball.r * 0.1,
+                    ball.x, ball.y, ball.r
+                );
+
+                if (ball.label === 'BlackBall') {
+                    ballGradient.addColorStop(0, '#444');
+                    ballGradient.addColorStop(1, '#000');
+                } else if (ball.label === 'PlayerBall') {
+                    ballGradient.addColorStop(0, 'rgba(255,255,255,0.8)');
+                    ballGradient.addColorStop(0.3, ball.color || 'hsl(0,70%,50%)');
+                    ballGradient.addColorStop(1, ball.color || 'hsl(0,70%,50%)');
+                } else {
+                    ballGradient.addColorStop(0, 'white');
+                    ballGradient.addColorStop(0.5, ball.color || 'white');
+                    ballGradient.addColorStop(1, ball.color || 'white');
+                }
+
+                ctx.fillStyle = ballGradient;
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Player labels
+                if (ball.label === 'PlayerBall' && ball.playerId) {
+                    const player = gameState.players[ball.playerId];
+                    if (player) {
+                        ctx.fillStyle = 'white';
+                        ctx.font = 'bold 14px Segoe UI, sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                        ctx.shadowBlur = 3;
+                        ctx.fillText(player.name, ball.x, ball.y - ball.r - 18);
+
+                        ctx.font = '12px Segoe UI, sans-serif';
+                        ctx.fillStyle = player.score >= 0 ? '#2ecc71' : '#e74c3c';
+                        ctx.fillText(`${player.score} pts`, ball.x, ball.y - ball.r - 5);
+                        ctx.shadowBlur = 0;
+
+                        // Cooldown ring
+                        if (player.cooldownProgress > 0) {
+                            ctx.beginPath();
+                            ctx.arc(ball.x, ball.y, ball.r + 5, -Math.PI / 2,
+                                -Math.PI / 2 + Math.PI * 2 * (1 - player.cooldownProgress));
+                            ctx.strokeStyle = 'rgba(46,204,113,0.8)';
+                            ctx.lineWidth = 3;
+                            ctx.stroke();
+                        }
+                    }
+                }
+
+                // Shine
+                ctx.beginPath();
+                ctx.arc(ball.x - ball.r * 0.3, ball.y - ball.r * 0.3, ball.r * 0.15, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255,255,255,0.4)';
+                ctx.fill();
+            });
+
+            ctx.restore();
+        }
+
+        draw();
+    </script>
+</body>
+
+</html>
