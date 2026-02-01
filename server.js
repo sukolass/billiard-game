@@ -76,9 +76,9 @@ function createScoreBall() {
     const x = Math.random() * (TABLE_WIDTH - 200) + 100;
     const y = Math.random() * (TABLE_HEIGHT - 200) + 100;
     const ball = Bodies.circle(x, y, BALL_RADIUS, {
-        restitution: 0.9,
-        friction: 0.005,
-        frictionAir: 0.008,
+        restitution: 0.85,
+        friction: 0.02,
+        frictionAir: 0.015,
         label: 'ScoreBall',
         render: { fillStyle: (Math.random() > 0.5 ? 'white' : '#ff3333') }
     });
@@ -88,9 +88,9 @@ function createScoreBall() {
 
 function createBlackBall() {
     const ball = Bodies.circle(TABLE_WIDTH / 2, TABLE_HEIGHT / 2, BLACK_BALL_RADIUS, {
-        restitution: 0.9,
-        friction: 0.005,
-        frictionAir: 0.008,
+        restitution: 0.85,
+        friction: 0.02,
+        frictionAir: 0.015,
         density: 0.004,
         label: 'BlackBall',
         render: { fillStyle: 'black' }
@@ -282,9 +282,9 @@ io.on('connection', (socket) => {
                 Math.random() * (TABLE_HEIGHT - 200) + 100,
                 PLAYER_BALL_RADIUS,
                 {
-                    restitution: 0.9,
-                    friction: 0.005,
-                    frictionAir: 0.008,
+                    restitution: 0.85,
+                    friction: 0.02,
+                    frictionAir: 0.015,
                     label: 'PlayerBall',
                 }
             );
@@ -337,7 +337,7 @@ io.on('connection', (socket) => {
 //                                SERVER LOOP                                 //
 // -------------------------------------------------------------------------- //
 
-const TICK_RATE = 1000 / 60;
+const TICK_RATE = 1000 / 20; // 20Hz instead of 60Hz for better performance
 setInterval(() => {
     Engine.update(engine, TICK_RATE);
 
